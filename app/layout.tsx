@@ -2,10 +2,11 @@ import './globals.css';
 import AuthWrapper from '../components/AuthWrapper';
 import Sidebar from '../components/Sidebar';
 import Topbar from '../components/Topbar';
+import Footer from '@/components/Footer';
 
 export const metadata = {
-  title: 'لوحة التحكم',
-  description: 'لوحة تحكم احترافية باستخدام Next.js وTailwind',
+  title: 'لوحة التحكم تطبيق شام',
+  description: 'تصميم وبرمجة شركة تكنو كور 2025 ',
 };
 
 export default function RootLayout({
@@ -32,7 +33,9 @@ export default function RootLayout({
               </main>
             </div>
           </div>
+          <Footer />
         </AuthWrapper>
+        
       </body>
     </html>
   );

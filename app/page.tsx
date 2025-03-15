@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { db } from "../services/firebase";
 import { collection, getDocs } from "firebase/firestore";
 import ProtectedRoute from "../components/ProtectedRoute";
+import Footer from "@/components/Footer";
 
 export default function DashboardPage() {
   const [ordersCount, setOrdersCount] = useState(0);
@@ -88,6 +89,7 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
+      <Footer />
     </ProtectedRoute>
   );
 }
