@@ -1,41 +1,25 @@
 import './globals.css';
+import { Metadata } from 'next';
 import AuthWrapper from '../components/AuthWrapper';
-import Sidebar from '../components/Sidebar';
-import Topbar from '../components/Topbar';
-import Footer from '@/components/Footer';
+import Footer from '../components/Footer';
+import RootClient from './root-client'; // مكوّن عميل
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'لوحة التحكم تطبيق شام',
-  description: 'تصميم وبرمجة شركة تكنو كور 2025 ',
+  description: 'تصميم وبرمجة شركة تكنو كور 2025',
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ar" dir="rtl">
-      <body className="bg-gray-100 text-gray-800">
+      <body className="bg-gray-100 text-gray-800 min-h-screen">
         <AuthWrapper>
-          <div className="flex min-h-screen">
-            {/* الشريط الجانبي */}
-            <Sidebar />
-
-            {/* المحتوى الرئيسي */}
-            <div className="flex flex-col flex-1">
-              {/* الشريط العلوي */}
-              <Topbar />
-
-              {/* المحتوى الداخلي للصفحات */}
-              <main className="p-6">
-                {children}
-              </main>
-            </div>
-          </div>
+          {/* مكوّن عميل يحوي المنطق التفاعلي لفتح/إغلاق الشريط الجانبي */}
+          <RootClient>
+            {children}
+          </RootClient>
           <Footer />
         </AuthWrapper>
-        
       </body>
     </html>
   );

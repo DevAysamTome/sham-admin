@@ -1,37 +1,30 @@
-'use client';
-import { useAuth } from './AuthProvider';
-import { auth } from '../services/firebase';
-import { signOut } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
+"use client";
+import { MdMenu, MdClose } from 'react-icons/md';
 
-export default function Topbar() {
-  const { user } = useAuth();
-  const router = useRouter();
+interface TopbarProps {
+  onToggleSidebar: () => void;
+  isSidebarOpen: boolean;
+}
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    router.push('/login');
-  };
-
+export default function Topbar({ onToggleSidebar, isSidebarOpen }: TopbarProps) {
   return (
-    <header className="flex items-center justify-between bg-white px-6 py-4 shadow-sm">
-      <div>
-        <h1 className="text-lg font-semibold">مرحبًا بك في لوحة التحكم</h1>
-      </div>
-      <div className="flex items-center gap-4">
-        {/* لا نظهر أي معلومات إلا إذا كان هناك مستخدم */}
-        {user && (
-          <>
-            <span className="text-sm text-gray-600">مسجّل باسم: {user.email}</span>
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors"
-            >
-              تسجيل الخروج
-            </button>
-          </>
-        )}
-      </div>
+    <header
+      className="
+        flex items-center justify-between 
+        px-4 py-3 shadow bg-white 
+        md:hidden   /* مخفي في الشاشات المتوسطة فأعلى إذا أردت */
+        z-50        /* لضمان ظهوره فوق الشريط الجانبي */
+      "
+    >
+      {/* زر الهامبرغر أو الإغلاق */}
+      <button onClick={onToggleSidebar} className="text-gray-700">
+        {isSidebarOpen ? <MdClose size={24} /> : <MdMenu size={24} />}
+      </button>
+
+      <h1 className="font-bold text-xl text-gray-700">لوحة التحكم</h1>
+
+      {/* مساحة لعناصر أخرى (تنبيهات، حساب...) */}
+      <div className="space-x-2">{/* ... */}</div>
     </header>
   );
 }
