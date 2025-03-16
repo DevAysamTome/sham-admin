@@ -1,28 +1,56 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { collection, addDoc } from 'firebase/firestore';
-import { db } from '../../../services/firebase';
+import { useState, useEffect } from 'react';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../../services/firebase';
 import { useRouter } from 'next/navigation';
 import ProtectedRoute from '../../../components/ProtectedRoute';
+
+interface CategoryData {
+  id: string;
+  name: string;
+  imageUrl?: string;
+}
 
 export default function AddProductPage() {
   // الحقول الرئيسية
   const [name, setName] = useState('');
   const [price, setPrice] = useState<number>(0);
-
-  // الخصم (نسبة مئوية)
   const [discount, setDiscount] = useState<number>(0);
 
   // الأحجام
   const [sizes, setSizes] = useState<string[]>([]);
   const [newSize, setNewSize] = useState('');
 
-  // رابط الصورة
-  const [imageURL, setImageURL] = useState('');
+  // ملف الصورة
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
+  // الأصناف
+  const [categories, setCategories] = useState<CategoryData[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(''); // الصنف المختار
 
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  // جلب الأصناف من Firestore
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'categories'));
+        const cats: CategoryData[] = snap.docs.map((doc) => ({
+          id: doc.id,
+          name: doc.data().name || '',
+          imageUrl: doc.data().imageUrl || '',
+        }));
+        setCategories(cats);
+      } catch (error) {
+        console.error('خطأ في جلب الأصناف:', error);
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   // إضافة حجم جديد إلى المصفوفة
   const handleAddSize = () => {
@@ -37,19 +65,42 @@ export default function AddProductPage() {
     setSizes((prev) => prev.filter((size) => size !== sizeToRemove));
   };
 
+  // اختيار ملف الصورة
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setImageFile(e.target.files[0]);
+    }
+  };
+
+  // إضافة المنتج
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
+      // حساب السعر بعد الخصم
+      const discountedPrice = price - (price * discount) / 100;
+
+      // رفع الصورة (إن وجدت) والحصول على رابطها
+      let downloadURL = '';
+      if (imageFile) {
+        const storageRef = ref(storage, `products/${Date.now()}_${imageFile.name}`);
+        await uploadBytes(storageRef, imageFile);
+        downloadURL = await getDownloadURL(storageRef);
+      }
+
+      // إضافة المستند إلى Firestore
       await addDoc(collection(db, 'products'), {
         name,
         price,
         discount,
         sizes,
-        imageURL, // حفظ رابط الصورة في المستند
+        imageURL: downloadURL, // رابط الصورة
+        categoryId: selectedCategoryId, // معرّف الصنف
       });
-      router.push('/products'); // العودة لقائمة المنتجات
+
+      // العودة لقائمة المنتجات
+      router.push('/products');
     } catch (error) {
       console.error('خطأ في إضافة المنتج:', error);
       alert('حدث خطأ أثناء إضافة المنتج.');
@@ -120,7 +171,6 @@ export default function AddProductPage() {
                 إضافة
               </button>
             </div>
-            {/* عرض الأحجام التي تمت إضافتها */}
             {sizes.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {sizes.map((size) => (
@@ -142,17 +192,42 @@ export default function AddProductPage() {
             )}
           </div>
 
-          {/* رابط الصورة */}
+          {/* اختيار الصنف */}
           <div>
-            <label className="block mb-1 text-gray-700">رابط الصورة:</label>
-            <input
-              type="text"
+            <label className="block mb-1 text-gray-700">اختر الصنف:</label>
+            <select
               className="border w-full px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
-              value={imageURL}
-              onChange={(e) => setImageURL(e.target.value)}
+              value={selectedCategoryId}
+              onChange={(e) => setSelectedCategoryId(e.target.value)}
+              required
+            >
+              <option value="">اختر الصنف</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-gray-500 mt-1">
+              تم جلب هذه الأصناف من قاعدة البيانات.
+            </p>
+          </div>
+
+          {/* رفع الصورة */}
+          <div>
+            <label className="block mb-1 text-gray-700">الصورة:</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4
+                         file:rounded file:border-0
+                         file:text-sm file:font-semibold
+                         file:bg-blue-50 file:text-blue-700
+                         hover:file:bg-blue-100"
             />
             <p className="text-sm text-gray-500 mt-1">
-              أدخل رابط الصورة (URL). يمكنك رفع الصورة في أي خدمة تخزين والحصول على رابطها.
+              اختر صورة للمنتج (png أو jpg).
             </p>
           </div>
 

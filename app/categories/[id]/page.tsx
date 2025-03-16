@@ -1,14 +1,16 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../../../services/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../../services/firebase';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 
 export default function EditCategoryPage() {
   const [name, setName] = useState('');
-  const [imageUrl, setimageUrl] = useState(''); // <-- حقل الصورة
+  const [oldImageUrl, setOldImageUrl] = useState(''); // رابط الصورة القديمة من Firestore
+  const [imageFile, setImageFile] = useState<File | null>(null); // الملف الجديد
   const [loading, setLoading] = useState(true);
 
   const router = useRouter();
@@ -24,7 +26,7 @@ export default function EditCategoryPage() {
         if (docSnap.exists()) {
           const categoryData = docSnap.data();
           setName(categoryData.name || '');
-          setimageUrl(categoryData.imageUrl || ''); // <-- تعبئة حقل الصورة
+          setOldImageUrl(categoryData.imageUrl || '');
         } else {
           alert('الصنف غير موجود!');
           router.push('/categories');
@@ -40,17 +42,34 @@ export default function EditCategoryPage() {
     fetchCategory();
   }, [id, router]);
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  // دالة لاختيار الملف من input
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setImageFile(e.target.files[0]);
+    }
+  };
+
+  const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
       const docRef = doc(db, 'categories', id);
+
+      // إذا اختار المستخدم ملفًا جديدًا، ارفعه واحصل على رابط التحميل
+      let newImageUrl = oldImageUrl; // الافتراضي هو الرابط القديم
+      if (imageFile) {
+        const storageRef = ref(storage, `categories/${Date.now()}_${imageFile.name}`);
+        await uploadBytes(storageRef, imageFile);
+        newImageUrl = await getDownloadURL(storageRef);
+      }
+
+      // حدّث المستند في Firestore
       await updateDoc(docRef, {
         name,
-        imageUrl, // <-- تحديث رابط الصورة
+        imageUrl: newImageUrl, // استخدم الرابط الجديد إن وجد، وإلا القديم
       });
-      router.push('/categories'); // العودة لقائمة الأصناف
+      router.push('/categories');
     } catch (error) {
       console.error('خطأ في تحديث الصنف:', error);
       alert('حدث خطأ أثناء تحديث الصنف.');
@@ -86,13 +105,29 @@ export default function EditCategoryPage() {
           </div>
 
           <div>
-            <label className="block mb-1 text-gray-700">رابط الصورة:</label>
+            <label className="block mb-1 text-gray-700">الصورة الحالية:</label>
+            {oldImageUrl ? (
+              <img src={oldImageUrl} alt="Category" className="w-32 h-32 object-cover mb-2" />
+            ) : (
+              <p className="text-sm text-gray-500 mb-2">لا توجد صورة قديمة.</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block mb-1 text-gray-700">اختر صورة جديدة (اختياري):</label>
             <input
-              type="text"
-              className="border w-full px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
-              value={imageUrl}
-              onChange={(e) => setimageUrl(e.target.value)}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4
+                         file:rounded file:border-0
+                         file:text-sm file:font-semibold
+                         file:bg-blue-50 file:text-blue-700
+                         hover:file:bg-blue-100"
             />
+            <p className="text-sm text-gray-500 mt-1">
+              إذا لم تختر صورة جديدة، ستبقى الصورة القديمة كما هي.
+            </p>
           </div>
 
           <button

@@ -1,25 +1,31 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { db } from '../../../services/firebase';
+import { doc, getDoc, updateDoc, getDocs, collection } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../../services/firebase';
 import ProtectedRoute from '../../../components/ProtectedRoute';
 
 export default function EditProductPage() {
   // الحقول الرئيسية
   const [name, setName] = useState('');
   const [price, setPrice] = useState<number>(0);
-
-  // الخصم (نسبة مئوية)
   const [discount, setDiscount] = useState<number>(0);
 
   // الأحجام
   const [sizes, setSizes] = useState<string[]>([]);
   const [newSize, setNewSize] = useState('');
 
-  // رابط الصورة
-  const [imageURL, setImageURL] = useState('');
+  // رابط الصورة القديم
+  const [oldImageURL, setOldImageURL] = useState('');
+
+  // ملف الصورة الجديد (إن اختاره المستخدم)
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
+  // الأصناف
+  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string>(''); // الصنف المختار
 
   const [loading, setLoading] = useState(true);
 
@@ -27,6 +33,7 @@ export default function EditProductPage() {
   const params = useParams();
   const { id } = params as { id: string };
 
+  // جلب بيانات المنتج من Firestore
   useEffect(() => {
     const fetchProduct = async () => {
       try {
@@ -39,7 +46,8 @@ export default function EditProductPage() {
           setPrice(productData.price || 0);
           setDiscount(productData.discount || 0);
           setSizes(productData.sizes || []);
-          setImageURL(productData.imageURL || '');
+          setOldImageURL(productData.imageURL || '');
+          setSelectedCategoryId(productData.categoryId || '');
         } else {
           alert('المنتج غير موجود!');
           router.push('/products');
@@ -55,6 +63,24 @@ export default function EditProductPage() {
     fetchProduct();
   }, [id, router]);
 
+  // جلب الأصناف
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'categories'));
+        const cats = snap.docs.map((d) => ({
+          id: d.id,
+          name: d.data().name || '',
+        }));
+        setCategories(cats);
+      } catch (error) {
+        console.error('خطأ في جلب الأصناف:', error);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+
   // إضافة حجم جديد
   const handleAddSize = () => {
     if (newSize.trim()) {
@@ -68,19 +94,39 @@ export default function EditProductPage() {
     setSizes((prev) => prev.filter((size) => size !== sizeToRemove));
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  // اختيار ملف الصورة الجديد
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setImageFile(e.target.files[0]);
+    }
+  };
+
+  // تحديث المنتج
+  const handleUpdate = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
       const docRef = doc(db, 'products', id);
+
+      // رفع الصورة الجديدة (إن وجدت)
+      let newImageURL = oldImageURL;
+      if (imageFile) {
+        const storageRef = ref(storage, `products/${Date.now()}_${imageFile.name}`);
+        await uploadBytes(storageRef, imageFile);
+        newImageURL = await getDownloadURL(storageRef);
+      }
+
+      // تحديث المستند في Firestore
       await updateDoc(docRef, {
         name,
         price,
         discount,
         sizes,
-        imageURL,
+        imageURL: newImageURL,
+        categoryId: selectedCategoryId,
       });
+
       router.push('/products'); // العودة لقائمة المنتجات
     } catch (error) {
       console.error('خطأ في تحديث المنتج:', error);
@@ -139,7 +185,7 @@ export default function EditProductPage() {
               onChange={(e) => setDiscount(Number(e.target.value))}
             />
             <p className="text-sm text-gray-500 mt-1">
-              أدخل قيمة الخصم كنسبة مئوية (مثلاً 10 يعني 10%)
+              أدخل قيمة الخصم كنسبة مئوية (مثلاً 10 يعني 10%).
             </p>
           </div>
 
@@ -183,15 +229,54 @@ export default function EditProductPage() {
             )}
           </div>
 
-          {/* رابط الصورة */}
+          {/* اختيار الصنف */}
           <div>
-            <label className="block mb-1 text-gray-700">رابط الصورة:</label>
-            <input
-              type="text"
+            <label className="block mb-1 text-gray-700">اختر الصنف:</label>
+            <select
               className="border w-full px-3 py-2 rounded focus:outline-none focus:ring-1 focus:ring-blue-400"
-              value={imageURL}
-              onChange={(e) => setImageURL(e.target.value)}
+              value={selectedCategoryId}
+              onChange={(e) => setSelectedCategoryId(e.target.value)}
+              required
+            >
+              <option value="">اختر الصنف</option>
+              {categories.map((cat) => (
+                <option key={cat.id} value={cat.id}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-gray-500 mt-1">
+              الأصناف من قاعدة البيانات.
+            </p>
+          </div>
+
+          {/* الصورة القديمة + اختيار صورة جديدة */}
+          <div>
+            <label className="block mb-1 text-gray-700">الصورة الحالية:</label>
+            {oldImageURL ? (
+              <img
+                src={oldImageURL}
+                alt="صورة المنتج"
+                className="w-32 h-32 object-cover mb-2"
+              />
+            ) : (
+              <p className="text-sm text-gray-500 mb-2">لا توجد صورة سابقة.</p>
+            )}
+
+            <label className="block mb-1 text-gray-700">اختر صورة جديدة (اختياري):</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4
+                         file:rounded file:border-0
+                         file:text-sm file:font-semibold
+                         file:bg-blue-50 file:text-blue-700
+                         hover:file:bg-blue-100"
             />
+            <p className="text-sm text-gray-500 mt-1">
+              إذا لم تختر صورة جديدة، ستبقى الصورة القديمة كما هي.
+            </p>
           </div>
 
           {/* زر التحديث */}
