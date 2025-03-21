@@ -1,190 +1,153 @@
 "use client";
 
-import React, { useEffect, useState, FormEvent } from "react";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "@/services/firebase"; // عدّل المسار حسب مشروعك
+import { useEffect, useState } from "react";
+import { collection, getDocs, doc, deleteDoc } from "firebase/firestore";
+import { db } from "@/services/firebase"; // عدّل المسار
+import Link from "next/link";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { useRouter } from "next/navigation";
 
 interface SocialLink {
+  id: string;
   type: string;
   url: string;
 }
 
-export default function SocialLinksAdmin() {
+export default function SettingsPage() {
   const [links, setLinks] = useState<SocialLink[]>([]);
-  const [newType, setNewType] = useState("");
-  const [newUrl, setNewUrl] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
-  // نستخدمه لجلب الروابط من Firestore
-  async function fetchSocialLinks() {
-    setLoading(true);
-    try {
-      const docRef = doc(db, "settings", "socialLinks"); // مستند محدد
-      const snap = await getDoc(docRef);
+  const router = useRouter();
 
-      if (snap.exists()) {
-        const data = snap.data() as { links: SocialLink[] };
-        setLinks(data.links || []);
-      } else {
-        // إذا لم يوجد المستند، يمكن إنشاؤه لاحقًا
-        setLinks([]);
-      }
-      setLoading(false);
-    } catch (err) {
-      console.error("خطأ في جلب روابط التواصل:", err);
-      setLoading(false);
-    }
-  }
-
-  // جلب الروابط عند التحميل
   useEffect(() => {
-    fetchSocialLinks();
+    const fetchLinks = async () => {
+      try {
+        setLoading(true);
+        const snap = await getDocs(collection(db, "socialLinks"));
+        const fetched = snap.docs.map((doc) => ({
+          id: doc.id,
+          type: doc.data().type || "",
+          url: doc.data().url || "",
+        }));
+        setLinks(fetched);
+      } catch (error) {
+        console.error("خطأ في جلب الروابط:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchLinks();
   }, []);
 
-  // إضافة رابط جديد إلى القائمة (محليًا)
-  function handleAddLink(e: FormEvent) {
-    e.preventDefault();
-    if (!newType.trim() || !newUrl.trim()) return;
+  // البحث في نوع الرابط أو الـ URL
+  const filteredLinks = links.filter(
+    (link) =>
+      link.type.toLowerCase().includes(search.toLowerCase()) ||
+      link.url.toLowerCase().includes(search.toLowerCase())
+  );
 
-    const newLink: SocialLink = {
-      type: newType.trim(),
-      url: newUrl.trim(),
-    };
-    setLinks((prev) => [...prev, newLink]);
-    setNewType("");
-    setNewUrl("");
-  }
+  const handlePrint = () => {
+    window.print();
+  };
 
-  // حذف رابط من القائمة (محليًا)
-  function handleDeleteLink(index: number) {
-    setLinks((prev) => prev.filter((_, i) => i !== index));
-  }
+  const handleDelete = async (id: string) => {
+    const confirmDelete = confirm("هل أنت متأكد أنك تريد حذف هذا الرابط؟");
+    if (!confirmDelete) return;
 
-  // حفظ التغييرات في Firestore
-  async function handleSaveChanges() {
-    setLoading(true);
     try {
-      const docRef = doc(db, "settings", "socialLinks");
-      await setDoc(docRef, { links }); 
-      // سيستبدل كامل محتوى المستند بـ { links: [...] }
-
-      alert("تم حفظ التغييرات بنجاح!");
-      setLoading(false);
-    } catch (err) {
-      console.error("خطأ في حفظ الروابط:", err);
-      alert("حدث خطأ أثناء حفظ التغييرات.");
-      setLoading(false);
+      await deleteDoc(doc(db, "socialLinks", id));
+      setLinks((prev) => prev.filter((l) => l.id !== id));
+    } catch (error) {
+      console.error("خطأ في حذف الرابط:", error);
+      alert("حدث خطأ أثناء حذف الرابط.");
     }
-  }
+  };
 
   return (
-    <div style={{ padding: 20, maxWidth: 600, margin: "0 auto" }}>
-      <h1 style={{ marginBottom: 20 }}>إدارة روابط التواصل الاجتماعي</h1>
-
-      {loading && <p>جاري التحميل...</p>}
-
-      {/* قائمة الروابط */}
-      {!loading && links.length > 0 && (
-        <ul style={{ listStyle: "none", padding: 0 }}>
-          {links.map((link, index) => (
-            <li
-              key={index}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                marginBottom: 10,
-                background: "#f1f1f1",
-                padding: 8,
-                borderRadius: 8,
-              }}
+    <ProtectedRoute>
+      <div className="bg-white p-6 rounded shadow">
+        {/* العنوان وشريط الأدوات */}
+        <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+          <h1 className="text-xl font-bold">إدارة روابط التواصل</h1>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="ابحث عن رابط..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 w-full md:w-64"
+            />
+            <button
+              onClick={handlePrint}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
             >
-              <div>
-                <strong>النوع:</strong> {link.type} <br />
-                <strong>الرابط:</strong> {link.url}
-              </div>
-              <button
-                style={{
-                  background: "red",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 4,
-                  cursor: "pointer",
-                  padding: "6px 12px",
-                }}
-                onClick={() => handleDeleteLink(index)}
-              >
-                حذف
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
+              طباعة
+            </button>
+            <Link
+              href="/settings/add"
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+            >
+              إضافة رابط جديد
+            </Link>
+          </div>
+        </div>
 
-      {!loading && links.length === 0 && (
-        <p style={{ marginBottom: 20 }}>لا توجد روابط حاليًا.</p>
-      )}
-
-      {/* نموذج إضافة رابط جديد */}
-      <form
-        onSubmit={handleAddLink}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-          marginBottom: 20,
-        }}
-      >
-        <label>
-          النوع (facebook, instagram...):
-          <input
-            type="text"
-            value={newType}
-            onChange={(e) => setNewType(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </label>
-
-        <label>
-          الرابط (URL):
-          <input
-            type="text"
-            value={newUrl}
-            onChange={(e) => setNewUrl(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </label>
-
-        <button
-          type="submit"
-          style={{
-            background: "green",
-            color: "#fff",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-            padding: "10px 16px",
-            alignSelf: "flex-start",
-          }}
-        >
-          إضافة
-        </button>
-      </form>
-
-      {/* زر حفظ التغييرات */}
-      <button
-        onClick={handleSaveChanges}
-        style={{
-          background: "#007BFF",
-          color: "#fff",
-          border: "none",
-          borderRadius: 4,
-          cursor: "pointer",
-          padding: "10px 16px",
-        }}
-        disabled={loading}
-      >
-        حفظ التغييرات
-      </button>
-    </div>
+        {loading ? (
+          <div className="flex justify-center items-center py-4">
+            <div className="h-8 w-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : filteredLinks.length === 0 ? (
+          <p className="text-center text-gray-500">لا توجد روابط مطابقة للبحث.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full border border-gray-200 rounded-lg shadow divide-y divide-gray-200">
+              <thead className="bg-gray-100 border-b border-gray-200">
+                <tr>
+                  <th className="px-4 py-2 text-left text-gray-600 font-semibold">
+                    رقم الرابط (ID)
+                  </th>
+                  <th className="px-4 py-2 text-left text-gray-600 font-semibold">
+                    النوع
+                  </th>
+                  <th className="px-4 py-2 text-left text-gray-600 font-semibold">
+                    الرابط (URL)
+                  </th>
+                  <th className="px-4 py-2 text-left text-gray-600 font-semibold">
+                    الإجراءات
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {filteredLinks.map((link) => (
+                  <tr key={link.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-2 whitespace-nowrap">{link.id}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">{link.type}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">{link.url}</td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <div className="flex gap-2">
+                        <Link
+                          href={`/settings/${link.id}`}
+                          className="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                        >
+                          تعديل
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(link.id)}
+                          className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </ProtectedRoute>
   );
 }
